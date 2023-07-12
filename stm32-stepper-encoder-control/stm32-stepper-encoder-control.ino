@@ -1,3 +1,17 @@
+/**
+ * STM32 Stepper Motor and Encoder Control
+ *
+ * Run this on an STM32 Nucleo board to control a stepper motor and read from
+ * a quadrature rotary encoder. Commands are given over serial.
+ * 
+ * Stepper motor driver: X-NUCLEO-IHM01A1
+ * Quadrature encoder: LPD3806-600BM-G5-24C
+ *
+ * Author: Shawn Hymel
+ * Date: July 11, 2023
+ * License: 0BSD (https://opensource.org/license/0bsd/)
+ */
+
 #include "RotaryEncoder.h"
 #include "L6474.h"
 
@@ -21,6 +35,19 @@ const int8_t STP_SPI_SCK_PIN = D13;
 // Constants
 const int ENC_STEPS_PER_ROTATION = 1200;
 const int STP_STEPS_PER_ROTATION = 400 * 8; // 400 steps, 1/8 microstep
+
+// Message constants
+const uint8_t TX_LEN = 6;
+const uint8_t TX_SOF = 0xA5;
+const uint8_t TX_EOF = 0x0A;
+const uint8_t TX_CMD_ACK = 0x01;
+const uint8_t TX_CMD_NAK = 0x02;
+const uint8_t TX_CMD_GET_ENC = 0x10;
+const uint8_t TX_CMD_GET_STP = 0x20;
+const uint8_t TX_CMD_SET_STP_HOME = 0x21;
+const uint8_t TX_CMD_MOV_STP_HOME = 0x22;
+const uint8_t TX_CMD_MOV_STP_BY = 0x23;
+const uint8_t TX_CMD_MOV_STP_TO = 0x24;
 
 // Stepper config
 L6474_init_t stepper_config = {
@@ -139,6 +166,18 @@ void move_stepper(int dir, float deg) {
   stepper->move(stp_dir, steps);
 }
 
+// Calculate the checksum of a message
+uint8_t calculate_checksum(uint8_t msg[], unsigned int len) {
+
+  uint8_t checksum = 0;
+
+  for (unsigned int i = 0; i < len; i++) {
+    checksum ^= msg[i];
+  }
+
+  return checksum;
+}
+
 /******************************************************************************
  * Main
  */
@@ -152,7 +191,6 @@ void setup() {
 
   // Pour some serial
   Serial.begin(115200);
-  Serial.println("Pin read test");
 
   // Configure encoder
   encoder = new RotaryEncoder(
@@ -192,21 +230,54 @@ void loop() {
   float enc_deg;
   float stp_deg;
   static int stp_dir = 0;
+  String str;
+  int len = 0;
+  unsigned int byte_counter = 0;
+  char msg[10];
 
-  // Move the stepper
-  stp_dir = !stp_dir;
-  move_stepper(stp_dir, 90.0);
+  // See if there's a message for us
+  if (Serial.available() > 0) {
 
-  // Read encoder and stepper angles (in degrees)
-  enc_deg = get_encoder_angle();
-  stp_deg = get_stepper_angle();
+    // Read entire message
+    while (Serial.available() > 0) {
+      // TODO: RX not dependent on EOF (as any byte could be '\n')
+      // Include a timeout
+      // Check for correct SOF
+      // Only need to read 6 bytes (including SOF and EOF)
+    }
 
-  // Print all the things
-  Serial.print("Encoder (deg): ");
-  Serial.print(enc_deg, 2);
-  Serial.print(" | Stepper (deg): ");
-  Serial.println(stp_deg, 2);
+    str = Serial.readStringUntil(EOF);
+    
+    // Convert String to character array
+    len = str.length();
+    str.toCharArray(msg, len);
 
-  // TODO: non-blocking wait
-  stepper->wait_while_active();
+    // Parse the message
+    if (msg[0] == TX_SOF) {
+      for (int i = 1; i < len; i++) {
+        Serial.print(msg[i]);
+      }
+      Serial.println();
+    }
+  }
+
+  // In case you use an RTOS, let other things run
+  yield();
+
+  // // Move the stepper
+  // stp_dir = !stp_dir;
+  // move_stepper(stp_dir, 90.0);
+
+  // // Read encoder and stepper angles (in degrees)
+  // enc_deg = get_encoder_angle();
+  // stp_deg = get_stepper_angle();
+
+  // // Print all the things
+  // Serial.print("Encoder (deg): ");
+  // Serial.print(enc_deg, 2);
+  // Serial.print(" | Stepper (deg): ");
+  // Serial.println(stp_deg, 2);
+
+  // // TODO: non-blocking wait
+  // stepper->wait_while_active();
 }
