@@ -10,13 +10,13 @@
 
 #define NUM_ACTIONS 5
 
-Control ctrl;
+ControlComms ctrl;
 
 void setup() {
 
   // Initialize our communication interface
   Serial.begin(115200);
-  ctrl.init(Serial);
+  ctrl.init(Serial, 115200, ControlComms::DEBUG_ERROR);
 }
 
 void loop() {
@@ -31,6 +31,7 @@ void loop() {
   }
 
   // In case you use an RTOS, let other things run
-  yield();
+  delay(10);
+  // yield();
 
 }
