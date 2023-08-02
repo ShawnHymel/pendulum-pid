@@ -13,15 +13,17 @@
 class ControlComms {
   public:
 
-    static const int OK = 0;
-    static const int ERROR = -1;
-
     typedef enum {
       DEBUG_NONE = 0,
       DEBUG_ERROR,
       DEBUG_WARN,
       DEBUG_INFO
     } DebugLevel;
+
+    typedef enum {
+      OK = 0,
+      ERROR
+    } StatusCode;
 
     /**
      * Constructor
@@ -39,7 +41,9 @@ class ControlComms {
      * Initialize serial object
      */
     template <typename T>
-    int init(T &ser, int baud = 115200, DebugLevel debug_level = DEBUG_NONE) {
+    int init(T &ser,
+             int baud = 115200, 
+             DebugLevel debug_level = DEBUG_NONE) {
 
       // Assign our serial object
       stream = &ser;
@@ -53,11 +57,16 @@ class ControlComms {
     /**
      * Receive action command, parse actions into floating point array.
      */
-    int receive_actions(float *actions_out, int max_actions) {
+    template <unsigned int num_actions>
+    StatusCode receive_actions(float *actions_out) {
 
       DeserializationError err = DeserializationError::Ok;
-      StaticJsonDocument<200> doc;
-      int retcode = OK; // TODO: enum retcode
+      StatusCode retcode = OK;
+
+      // Figure out size of receive doc capacity
+      constexpr unsigned int rx_doc_capacity = 
+        JSON_OBJECT_SIZE(1) + JSON_ARRAY_SIZE(num_actions + 1);
+      StaticJsonDocument<rx_doc_capacity> doc;
 
       // Return early if nothing in receive buffer
       if (stream->available() <= 0) {
@@ -80,8 +89,18 @@ class ControlComms {
             stream->println("' not found");
           }
         }
+
+      // We'll get some invalid straggle chars over Serial, so ignore them
       } else {
-        retcode = ERROR;
+        switch (err.code()) {
+          case DeserializationError::EmptyInput:
+          case DeserializationError::IncompleteInput:
+          case DeserializationError::InvalidInput:
+            break;
+          default:
+            retcode = ERROR;
+            break;
+        }
       }
 
       // Flush receive buffer to avoid reading any extra '\r' or '\n' next time
@@ -102,6 +121,7 @@ class ControlComms {
 
   private:
     Stream *stream;
+    size_t rx_doc_capacity = 0;
     DebugLevel debug = DEBUG_NONE;
     static constexpr char rx_key[] = "actions";
 };

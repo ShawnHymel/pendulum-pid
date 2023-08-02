@@ -1,5 +1,6 @@
 // TODO: 
 // * Use ArduinoJSON to parse received messages
+//   - Make doc <size> dynamic (or set on instantiation)
 // * Create send_observation() function
 // * Write matching functions in Python
 // * Tie to stepper and encoder controls
@@ -8,7 +9,7 @@
 
 #include "control-comms.h"
 
-#define NUM_ACTIONS 5
+static constexpr unsigned int NUM_ACTIONS = 5;
 
 ControlComms ctrl;
 
@@ -22,11 +23,11 @@ void setup() {
 void loop() {
 
   float actions[NUM_ACTIONS];
-  int num_actions_received = 0;
+  ControlComms::StatusCode rx_code;
 
   // Receive
-  num_actions_received = ctrl.receive_actions(actions, NUM_ACTIONS);
-  if (num_actions_received < 0) {
+  rx_code = ctrl.receive_actions<NUM_ACTIONS>(actions);
+  if (rx_code != ControlComms::OK) {
     Serial.println("Error receiving");
   }
 
