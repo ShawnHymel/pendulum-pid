@@ -3,6 +3,7 @@
  * @brief Communication interface for actions and observations over serial
  * @author Shawn Hymel
  * @date 2023-08-05
+ * @version 0.9
  * 
  * @details
  * This interface provides two main functions: receive_action() and
@@ -49,6 +50,8 @@
  * @endcode
  *
  * @copyright
+ * Zero-Clause BSD
+ * 
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted.
  * 
@@ -64,9 +67,15 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 
+/**
+ * @brief Interface class to construct JSON objects to send and receive.
+ */
 class ControlComms {
   public:
 
+    /**
+     * @brief Level of debugging info sent over serial.
+     */
     typedef enum {
       DEBUG_NONE = 0,
       DEBUG_ERROR,
@@ -74,6 +83,9 @@ class ControlComms {
       DEBUG_INFO
     } DebugLevel;
 
+    /**
+     * @brief Status codes returned by functions.
+     */
     typedef enum {
       OK = 0,
       RX_EMPTY,
@@ -81,7 +93,7 @@ class ControlComms {
     } StatusCode;
 
     /**
-     * Constructor
+     * @brief Default constructor placeholder
      */
     ControlComms() {
     }
@@ -104,7 +116,14 @@ class ControlComms {
     }
 
     /**
-     * Send a JSON object with the observation out over the serial port.
+     * @brief Send a JSON object with the observation out over the serial port.
+     *
+     * @param[in] status User-defined status code to send to computer
+     * @param[in] timestamp User-defined timestamp (unsigned long integer)
+     * @param[in] terminated True if the episode is over, false otherwise
+     * @param[in] observation Array of values (floats) to send to the computer
+     * @param[in] num_obs Number of values in the observation array
+     * @param[in] digits Truncate the floats in the observation to this number
      */
     void send_observation(
       int status, 
@@ -133,7 +152,12 @@ class ControlComms {
     }
 
     /**
-     * Receive action command, parse actions into floating point array.
+     * @brief Receive action command, parse actions into floating point array.
+     *
+     * @tparam num_actions Number of actions to be received
+     * @param[out] action_out Received actions are stored here
+     *
+     * @return OK, RX_EMPTY, or ERROR depending on the received string
      */
     template <size_t num_actions>
     StatusCode receive_action(float *action_out) {
