@@ -36,11 +36,12 @@
  *  }
  *
  *  void loop() {
+ *    int command;
  *    float action[NUM_ACTIONS];
  *    float observation[NUM_OBS] = {3, 4, 5};
  *    ControlComms::StatusCode rx_code;
  *    
- *    rx_code = ctrl.receive_action<NUM_ACTIONS>(action);
+ *    rx_code = ctrl.receive_action<NUM_ACTIONS>(&command, action);
  *    if (rx_code == ControlComms::OK) {
  *      ctrl.send_observation(0, millis(), false, observation, NUM_OBS);
  *    } else if (rx_code == ControlComms::ERROR) {
@@ -155,19 +156,20 @@ class ControlComms {
      * @brief Receive action command, parse actions into floating point array.
      *
      * @tparam num_actions Number of actions to be received
+     * @param[out] command User-defined command to be received
      * @param[out] action_out Received actions are stored here
      *
      * @return OK, RX_EMPTY, or ERROR depending on the received string
      */
     template <size_t num_actions>
-    StatusCode receive_action(float *action_out) {
+    StatusCode receive_action(int *command, float *action_out) {
 
       DeserializationError err = DeserializationError::Ok;
       StatusCode retcode = OK;
 
       // Figure out size of receive doc capacity
       constexpr unsigned int rx_doc_capacity = 
-        JSON_OBJECT_SIZE(1) + JSON_ARRAY_SIZE(num_actions + 1);
+        JSON_OBJECT_SIZE(2) + JSON_ARRAY_SIZE(num_actions + 1);
       StaticJsonDocument<rx_doc_capacity> doc;
 
       // Return early if nothing in receive buffer
@@ -179,11 +181,15 @@ class ControlComms {
       err = deserializeJson(doc, *stream);
       if (err.code() == DeserializationError::Ok) {
 
-        // Make sure the key string is present
-        if (doc.containsKey(rx_key)) {
+        // Make sure the keys are present
+        if (doc.containsKey(rx_action_key) && 
+          doc.containsKey(rx_command_key)) {
+
+          // Save command to output variable
+          *command = doc[rx_command_key];
 
           // Save values to output array
-          JsonArray vals = doc[rx_key];
+          JsonArray vals = doc[rx_action_key];
           if (vals.size() == num_actions) {
             for (int i = 0; i < vals.size(); i++) {
               action_out[i] = vals[i];
@@ -204,8 +210,10 @@ class ControlComms {
         } else {
           retcode = ERROR;
           if (debug >= DEBUG_ERROR) {
-            stream->print("JSON Error: key '");
-            stream->print(rx_key);
+            stream->print("JSON Error: keys '");
+            stream->print(rx_command_key);
+            stream->print("' or '");
+            stream->print(rx_action_key);
             stream->println("' not found");
           }
         }
@@ -244,5 +252,6 @@ class ControlComms {
     Stream *stream;
     size_t rx_doc_capacity = 0;
     DebugLevel debug = DEBUG_NONE;
-    static constexpr char rx_key[] = "action";
+    static constexpr char rx_action_key[] = "action";
+    static constexpr char rx_command_key[] = "command";
 };
