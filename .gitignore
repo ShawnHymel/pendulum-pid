@@ -1,2 +1,5 @@
+# Python
+venv/
+
 # Jupyter notebook
 .ipynb_checkpoints/
