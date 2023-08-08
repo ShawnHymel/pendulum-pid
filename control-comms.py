@@ -1,3 +1,54 @@
+"""
+Communication interface for actions and observations over serial
+
+Author:
+    Shawn Hymel
+
+Date:
+    Created on: 2023-08-05
+
+Version:
+    0.1
+
+This interface provides one main function, step(), and other supporting
+functions to initialize a serial connection with the counterpart interface
+running on a microcontroller or single-board computer.
+
+Initialize the serial port by calling connect(). Call step() with the user-
+defined command and action array. The command and action are sent to the
+connected hardware, which performs the desired action and returns with 
+a status, terminated, and observation information.
+
+Test this module with the command line:
+
+    python control-comms.py -p "COM6" -b 115200 -c 2 -a 5.5 -d 1
+
+Example:
+    If you are using this module in your own program:
+
+        ctrl = ControlComms()
+        ctrl.connect("COM6", 115200)
+        resp = ctrl.step(2, [5.5])
+        if resp:
+            status, timestamp, terminated, observation = resp
+
+License:
+    Zero-Clause BSD
+
+    Permission to use, copy, modify, and/or distribute this software for
+    any purpose with or without fee is hereby granted.
+
+    THE SOFTWARE IS PROVIDED “AS IS” AND THE AUTHOR DISCLAIMS ALL
+    WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES
+    OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE
+    FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY
+    DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN
+    AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
+    OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+"""
+
+import sys
+import argparse
 import json
 from enum import Enum
 from functools import total_ordering
@@ -15,7 +66,8 @@ RX_KEY_TERMINATED = "terminated"
 RX_KEY_OBSERVATION = "observation"
 
 class StatusCode(Enum):
-    """Status codes for the ControlComms class
+    """
+    Status codes for the ControlComms class
 
     Attributes:
         OK (int): A function returns successfully
@@ -26,7 +78,8 @@ class StatusCode(Enum):
 
 @total_ordering
 class DebugLevel(Enum):
-    """Available debug levels for ControlComms
+    """
+    Available debug levels for ControlComms
 
     Attributes:
         DEBUG_NONE (int): No debugging info printed to the console
@@ -46,7 +99,8 @@ class DebugLevel(Enum):
         return NotImplemented
 
 class ControlComms:
-    """Interface class to send commands and receive observations
+    """
+    Interface class to send commands and receive observations
 
     Instantiate this class and pass the location of the serial port. The object
     will open a serial connection to the attached hardware. You can call the
@@ -64,7 +118,8 @@ class ControlComms:
         timeout: float = 1.0, 
         debug_level: DebugLevel = DebugLevel.DEBUG_NONE
     ) -> None:
-        """Constructor to assign attributes
+        """
+        Constructor to assign attributes
 
         Args:
             timeout_ms (int): Number of milliseconds to wait for a response
@@ -75,14 +130,17 @@ class ControlComms:
         self.debug_level = debug_level
 
     def __del__(self) -> None:
-        """Destructor: make sure to close the serial port"""
+        """
+        Destructor: make sure to close the serial port
+        """
         self.close()
 
     def set_timeout(
         self, 
         timeout: float = 1.0
     ) -> None:
-        """Set the amount of time (ms) to wait for a response
+        """
+        Set the amount of time (ms) to wait for a response
 
         Args:
             timeout_ms (int): Number of milliseconds to wait for a response
@@ -90,7 +148,8 @@ class ControlComms:
         self.ser.timeout = timeout
 
     def get_serial_list(self) -> Tuple[Tuple[str, str, str], ...]:
-        """Get a list of available serial ports
+        """
+        Get a list of available serial ports
 
         Returns:
             Tuple of serial port information (each stored in a tuple)
@@ -107,7 +166,8 @@ class ControlComms:
         port: str, 
         baud_rate: int = 115200
     ) -> StatusCode:
-        """Attempt to connect to the given serial port
+        """
+        Attempt to connect to the given serial port
 
         Args:
             port (str): Location of port file (Linux/Mac) or COM string (Win)
@@ -141,7 +201,9 @@ class ControlComms:
         return ret
 
     def close(self) -> None:
-        """Close the serial port"""
+        """
+        Close the serial port
+        """
         self.ser.close()
 
     def step(
@@ -149,7 +211,8 @@ class ControlComms:
         command: int,
         action: List[float]
     ) -> Union[None, Tuple[int, int, bool, Tuple[float, ...]]]:
-        """Send a command and action list, wait for observation in return
+        """
+        Send a command and action list, wait for observation in return
 
         Send a command and list of action values to the driver hardware. Wait
         for the given `timeout_ms` amount of time for a response from the
@@ -188,9 +251,9 @@ class ControlComms:
         try:
             msg = msg.decode('utf-8')
             data = json.loads(msg)
-        except Exception as e:
+        except ValueError as e:
             if self.debug_level >= DebugLevel.DEBUG_ERROR:
-                print(f"Error parsing message: {e}")
+                print(f"Error parsing message. Message received: {msg}")
             return None
 
         # Return tuple with results
@@ -203,35 +266,89 @@ class ControlComms:
 
 if __name__ == "__main__":
 
-    # TEST constants for stepper and encoder
-    STATUS_OK = 0
-    STATUS_STP_MOVING = 1
-    CMD_RESET = 0
-    CMD_MOVE_TO = 1
-    CMD_MOVE_BY = 2
+    # Defaults
+    DEFAULT_BAUD = 115200
 
-    # TEST
-    SERIAL_PORT = "COM6"
-    BAUD_RATE = 115200
+    # Command line arguments
+    parser = argparse.ArgumentParser(description="Serial control interface")
+    parser.add_argument(
+        '-p',
+        '--port',
+        dest='port',
+        type=str,
+        required=False,
+        help="Serial port to connect to. Omit to print out all available ports."
+    )
+    parser.add_argument(
+        '-b',
+        '--baud',
+        dest='baud',
+        type=int,
+        default=DEFAULT_BAUD,
+        help="Baud rate (default = " + str(DEFAULT_BAUD) + ")."
+    )
+    parser.add_argument(
+        '-c',
+        '--command',
+        dest='command',
+        type=int,
+        default=0,
+        help="User-defined command (integer) to send (default = 0)."
+    )
+    parser.add_argument(
+        '-a',
+        '--action',
+        type=float,
+        nargs='+',
+        help="One or more space-separated list of user-defined numbers " \
+             "(float) to send."
+    )
+    parser.add_argument(
+        '-d',
+        '--debug',
+        type=int,
+        default=0,
+        help="Debug level: none=0, error=1, warn=2, info=3 (default = 0)."
+    )
+                            
+    # Parse arguments
+    args = parser.parse_args()
+
+    # Check debug level
+    try:
+        debug_level = DebugLevel(args.debug)
+    except ValueError as e:
+        print(f"ERROR: {e}")
+        sys.exit(1)
 
     # Create interface
-    ctrl = ControlComms(timeout = 1.0, debug_level = DebugLevel.DEBUG_ERROR)
+    ctrl = ControlComms(timeout = 1.0, debug_level = debug_level)
 
-    # List available serial ports
-    print("Available USB ports:")
-    serial_ports = ctrl.get_serial_list()
-    if serial_ports:
-        for port in serial_ports:
-            print(f"  {port}")
-    else:
-        print("  No serial ports found")
+    # Print available serial ports if port not given
+    if not args.port:
+        print("Argument '--port' required. Available USB ports:")
+        serial_ports = ctrl.get_serial_list()
+        if serial_ports:
+            for port in serial_ports:
+                print(f"  {port}")
+        else:
+            print("  No serial ports found")
+        sys.exit(0)
 
     # Open serial port
-    ctrl.connect(SERIAL_PORT, BAUD_RATE)
+    ctrl.connect(args.port, args.baud)
 
-    # TEST: write
-    ret = ctrl.step(2, [-5.0])
+    # Send command and action, wait for response
+    resp = ctrl.step(args.command, args.action)
 
-    if ret:
-        for val in ret:
-            print(val)
+    # Print response as JSON string
+    if resp:
+        data = {}
+        data[RX_KEY_STATUS] = resp[0]
+        data[RX_KEY_TIMESTAMP] = resp[1]
+        data[RX_KEY_TERMINATED] = resp[2]
+        data[RX_KEY_OBSERVATION] = resp[3]
+        print(json.dumps(data))
+        sys.exit(0)
+    else:
+        sys.exit(1)

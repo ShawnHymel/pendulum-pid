@@ -3,7 +3,7 @@
  * @brief Communication interface for actions and observations over serial
  * @author Shawn Hymel
  * @date 2023-08-05
- * @version 0.9
+ * @version 0.1
  * 
  * @details
  * This interface provides two main functions: receive_action() and
