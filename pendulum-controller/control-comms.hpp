@@ -50,6 +50,10 @@
  *  }
  * @endcode
  *
+ * @todo Create simple JSON parser to remove need for ArduinoJSON library
+ * @todo Rename RX keys to `rx_key_<item>`
+ * @todo Turn TX keys into `tx_key_<item>` member constants
+ * 
  * @copyright
  * Zero-Clause BSD
  * 
