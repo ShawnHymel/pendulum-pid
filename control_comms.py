@@ -17,7 +17,10 @@ running on a microcontroller or single-board computer.
 Initialize the serial port by calling connect(). Call step() with the user-
 defined command and action array. The command and action are sent to the
 connected hardware, which performs the desired action and returns with 
-a status, terminated, and observation information.
+a status, timestamp, terminated, and observation information as a tuple in the
+following format:
+
+    (status, timestamp, terminated, [obs0, obs1, ...])
 
 Test this module with the command line:
 
@@ -322,7 +325,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     # Create interface
-    ctrl = ControlComms(timeout = 1.0, debug_level = debug_level)
+    ctrl = ControlComms(timeout=1.0, debug_level=debug_level)
 
     # Print available serial ports if port not given
     if not args.port:

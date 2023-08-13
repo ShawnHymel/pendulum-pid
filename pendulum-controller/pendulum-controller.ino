@@ -47,29 +47,32 @@ const int8_t STP_SPI_MISO_PIN = D12;
 const int8_t STP_SPI_SCK_PIN = D13;
 
 // Communication constants
+static const unsigned int BAUD_RATE = 500000;
+static const ControlComms::DebugLevel CTRL_DEBUG = ControlComms::DEBUG_ERROR;
 static constexpr size_t NUM_ACTIONS = 1;
 static constexpr size_t NUM_OBS = 2;
 static const unsigned int STATUS_OK = 0;
 static const unsigned int STATUS_STP_MOVING = 1;
-static const unsigned int CMD_RESET = 0;
+static const unsigned int CMD_SET_HOME = 0;
 static const unsigned int CMD_MOVE_TO = 1;
 static const unsigned int CMD_MOVE_BY = 2;
+static const unsigned int CMD_SET_STEP_MODE = 3;
 
 // Stepper and encoder constants
 const int ENC_STEPS_PER_ROTATION = 1200;
-const int STP_STEPS_PER_ROTATION = 400 * 8; // 400 steps, 1/8 microstep
+const int STP_STEPS_PER_ROTATION = 200;   // 200 full steps, must multiply by div_per_step!
 
 // Stepper config
 L6474_init_t stepper_config = {
-  160,                              // Acceleration rate in pps^2. Range: (0..+inf)
-  160,                              // Deceleration rate in pps^2. Range: (0..+inf)
-  1000,                             // Maximum speed in pps. Range: (30..10000]
-  800,                              // Minimum speed in pps. Range: [30..10000)
-  250,                              // Torque regulation current in mA. Range: 31.25mA to 4000mA
+  10000,                             // Acceleration rate in pps^2. Range: (0..+inf)
+  10000,                             // Deceleration rate in pps^2. Range: (0..+inf)
+  5000,                             // Maximum speed in pps. Range: (30..10000]
+  1000,                              // Minimum speed in pps. Range: [30..10000)
+  300,                              // Torque regulation current in mA. Range: 31.25mA to 4000mA
   L6474_OCD_TH_750mA,               // Overcurrent threshold (OCD_TH register)
   L6474_CONFIG_OC_SD_ENABLE,        // Overcurrent shutwdown (OC_SD field of CONFIG register)
   L6474_CONFIG_EN_TQREG_TVAL_USED,  // Torque regulation method (EN_TQREG field of CONFIG register)
-  L6474_STEP_SEL_1_8,               // Step selection (STEP_SEL field of STEP_MODE register)
+  L6474_STEP_SEL_1_16,               // Step selection (STEP_SEL field of STEP_MODE register)
   L6474_SYNC_SEL_1_2,               // Sync selection (SYNC_SEL field of STEP_MODE register)
   L6474_FAST_STEP_12us,             // Fall time value (T_FAST field of T_FAST register). Range: 2us to 32us
   L6474_TOFF_FAST_8us,              // Maximum fast decay time (T_OFF field of T_FAST register). Range: 2us to 32us
@@ -92,6 +95,7 @@ volatile int led_state = 0;
 SPIClass dev_spi(STP_SPI_MOSI_PIN, STP_SPI_MISO_PIN, STP_SPI_SCK_PIN);
 L6474 *stepper;
 ControlComms ctrl;
+unsigned int div_per_step = 16;
 
 /******************************************************************************
  * Interrupt service routines (ISRs)
@@ -154,17 +158,22 @@ float get_stepper_angle() {
   pos = stepper->get_position();
 
   // Convert to degrees
-  pos = pos % STP_STEPS_PER_ROTATION;
-  pos = pos >= 0 ? pos : pos + STP_STEPS_PER_ROTATION;
-  deg = (float)pos * (360.0 / STP_STEPS_PER_ROTATION);
+  pos = pos % (STP_STEPS_PER_ROTATION * div_per_step);
+  pos = pos >= 0 ? pos : pos + (STP_STEPS_PER_ROTATION * div_per_step);
+  deg = (float)pos * (360.0 / (STP_STEPS_PER_ROTATION * div_per_step));
 
   return deg;
+}
+
+// Tell the stepper to set the current position as "home" (0 deg)
+void set_stepper_home() {
+  stepper->set_home();
 }
 
 // Tell the stepper motor to move to a particular angle in degrees
 void move_stepper_to(float deg) {
 
-  int steps = (int)(deg * STP_STEPS_PER_ROTATION / 360.0);
+  int steps = (int)(deg * STP_STEPS_PER_ROTATION * div_per_step / 360.0);
 
   // Tell stepper motor to move
   stepper->go_to(steps);
@@ -174,7 +183,7 @@ void move_stepper_to(float deg) {
 void move_stepper_by(float deg) {
 
   StepperMotor::direction_t stp_dir = StepperMotor::FWD;
-  int steps = (int)(deg * STP_STEPS_PER_ROTATION / 360.0);
+  int steps = (int)(deg * STP_STEPS_PER_ROTATION * div_per_step / 360.0);
 
   // Use direction and absolute step counts
   if (steps < 0) {
@@ -184,6 +193,34 @@ void move_stepper_by(float deg) {
 
   // Tell stepper motor to move
   stepper->move(stp_dir, steps);
+}
+
+// Set step mode according to p. 38 in the L6474 datasheet (modes 0..4)
+void set_step_mode(int mode) {
+  switch (mode) {
+    case 0:
+      stepper->set_step_mode(StepperMotor::STEP_MODE_FULL);
+      div_per_step = 1;
+      break;
+    case 1:
+      stepper->set_step_mode(StepperMotor::STEP_MODE_HALF);
+      div_per_step = 2;
+      break;
+    case 2:
+      stepper->set_step_mode(StepperMotor::STEP_MODE_1_4);
+      div_per_step = 4;
+      break;
+    case 3:
+      stepper->set_step_mode(StepperMotor::STEP_MODE_1_8);
+      div_per_step = 8;
+      break;
+    case 4:
+      stepper->set_step_mode(StepperMotor::STEP_MODE_1_16);
+      div_per_step = 16;
+      break;
+    default:
+      break;
+  }
 }
 
 /******************************************************************************
@@ -198,8 +235,8 @@ void setup() {
   pinMode(D5, INPUT_PULLUP);
 
   // Initialize our communication interface
-  Serial.begin(115200);
-  ctrl.init(Serial, ControlComms::DEBUG_NONE);
+  Serial.begin(BAUD_RATE);
+  ctrl.init(Serial, CTRL_DEBUG);
 
   // Configure encoder
   encoder = new RotaryEncoder(
@@ -248,8 +285,8 @@ void loop() {
 
     // Move the stepper as requested
     switch (command) {
-      case CMD_RESET:
-        move_stepper_to(0.0);
+      case CMD_SET_HOME:
+        set_stepper_home();
         break;
       case CMD_MOVE_TO:
         move_stepper_to(action[0]);
@@ -257,6 +294,9 @@ void loop() {
       case CMD_MOVE_BY:
         move_stepper_by(action[0]);
         break;
+      case CMD_SET_STEP_MODE:
+        set_step_mode((unsigned int)action[0]);
+        set_stepper_home();
       default:
         break;
     }
