@@ -128,9 +128,11 @@ class ControlComms:
             timeout_ms (int): Number of milliseconds to wait for a response
             debug_level (int): How much debugging info to print to the screen
         """
-        self.ser = serial.Serial()
+        self.ser = serial.Serial(dsrdtr=False)
         self.set_timeout(timeout)
         self.debug_level = debug_level
+        self.ser.rts = False
+        self.ser.dtr = False
 
     def __del__(self) -> None:
         """
